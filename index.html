@@ -1,0 +1,928 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PSO–SOM–LVQ · Analisis Kecanduan Media Sosial</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0F1420;
+    --bg-panel:#161D2C;
+    --bg-panel-alt:#1C2536;
+    --bg-inset:#0B0F18;
+    --line:#2A3448;
+    --line-soft:#212A3C;
+    --text:#E9ECF3;
+    --text-dim:#8B93A7;
+    --text-faint:#5C6478;
+    --pso:#E8A33D;
+    --pso-dim:#4A3A20;
+    --som:#4FB6A8;
+    --som-dim:#1E3A36;
+    --lvq:#D6607E;
+    --lvq-dim:#3A2029;
+    --eval:#7C9CDE;
+    --eval-dim:#20283C;
+    --radius:10px;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--bg);
+    color:var(--text);
+    font-family:'Inter',sans-serif;
+    line-height:1.55;
+    padding-bottom:80px;
+  }
+  h1,h2,h3{font-family:'Space Grotesk',sans-serif;margin:0;letter-spacing:-0.01em;}
+  .mono{font-family:'JetBrains Mono',monospace;}
+  .wrap{max-width:1080px;margin:0 auto;padding:0 24px;}
+
+  /* ---------- HERO ---------- */
+  .hero{
+    border-bottom:1px solid var(--line);
+    padding:48px 0 36px;
+    background:
+      radial-gradient(circle at 15% 20%, rgba(232,163,61,0.08), transparent 40%),
+      radial-gradient(circle at 85% 0%, rgba(79,182,168,0.08), transparent 45%),
+      radial-gradient(circle at 60% 90%, rgba(214,96,126,0.06), transparent 40%);
+  }
+  .hero .eyebrow{
+    display:inline-flex;align-items:center;gap:8px;
+    font-family:'JetBrains Mono',monospace;
+    font-size:12px;color:var(--text-dim);
+    border:1px solid var(--line);
+    padding:4px 10px;border-radius:100px;
+    margin-bottom:18px;
+  }
+  .eyebrow .dot{width:6px;height:6px;border-radius:50%;background:var(--som);}
+  .hero h1{font-size:clamp(28px,4vw,40px);font-weight:700;max-width:760px;}
+  .hero h1 span{color:var(--text-dim);font-weight:500;}
+  .hero p{color:var(--text-dim);max-width:600px;margin-top:14px;font-size:15px;}
+
+  /* ---------- PIPELINE (signature element) ---------- */
+  .pipeline{
+    display:flex;align-items:flex-start;justify-content:space-between;
+    margin-top:36px;position:relative;
+  }
+  .pipeline::before{
+    content:"";position:absolute;top:19px;left:19px;right:19px;height:2px;
+    background:var(--line);z-index:0;
+  }
+  .pipeline .track{
+    position:absolute;top:19px;left:19px;height:2px;background:var(--text-dim);
+    width:0%;z-index:1;transition:width .5s ease;
+  }
+  .pnode{position:relative;z-index:2;display:flex;flex-direction:column;align-items:center;width:19%;text-align:center;}
+  .pnode .ring{
+    width:40px;height:40px;border-radius:50%;
+    background:var(--bg-panel);border:2px solid var(--line);
+    display:flex;align-items:center;justify-content:center;
+    font-family:'JetBrains Mono',monospace;font-size:13px;color:var(--text-faint);
+    transition:all .35s ease;
+  }
+  .pnode.active .ring{border-color:var(--stage-color);color:var(--stage-color);box-shadow:0 0 0 4px var(--stage-glow);}
+  .pnode.done .ring{background:var(--stage-color);border-color:var(--stage-color);color:#0B0F18;}
+  .pnode .plabel{margin-top:10px;font-size:12.5px;color:var(--text-dim);font-weight:500;}
+  .pnode.active .plabel, .pnode.done .plabel{color:var(--text);}
+  .pnode[data-stage="data"]{--stage-color:#B8BFCF;--stage-glow:rgba(184,191,207,0.18);}
+  .pnode[data-stage="pso"]{--stage-color:var(--pso);--stage-glow:rgba(232,163,61,0.18);}
+  .pnode[data-stage="som"]{--stage-color:var(--som);--stage-glow:rgba(79,182,168,0.18);}
+  .pnode[data-stage="lvq"]{--stage-color:var(--lvq);--stage-glow:rgba(214,96,126,0.18);}
+  .pnode[data-stage="eval"]{--stage-color:var(--eval);--stage-glow:rgba(124,156,222,0.18);}
+
+  /* ---------- SECTIONS ---------- */
+  section{padding:40px 0;border-bottom:1px solid var(--line-soft);}
+  .sec-head{display:flex;align-items:baseline;gap:10px;margin-bottom:6px;}
+  .sec-num{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--text-faint);}
+  .sec-head h2{font-size:20px;}
+  .sec-desc{color:var(--text-dim);font-size:14px;margin-bottom:22px;max-width:640px;}
+
+  /* ---------- PANEL / CARD ---------- */
+  .panel{background:var(--bg-panel);border:1px solid var(--line);border-radius:var(--radius);padding:20px;}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:18px;}
+  @media(max-width:800px){.grid2{grid-template-columns:1fr;}}
+
+  /* ---------- TABS ---------- */
+  .tabs{display:flex;gap:4px;margin-bottom:16px;border-bottom:1px solid var(--line);}
+  .tab{
+    background:none;border:none;color:var(--text-dim);font-family:'Inter';font-size:13.5px;
+    padding:9px 14px;cursor:pointer;border-bottom:2px solid transparent;font-weight:500;
+  }
+  .tab.active{color:var(--text);border-bottom-color:var(--som);}
+  .tabpane{display:none;}
+  .tabpane.active{display:block;}
+
+  /* ---------- DATA TABLE ---------- */
+  .table-scroll{overflow-x:auto;border:1px solid var(--line);border-radius:8px;}
+  table{border-collapse:collapse;width:100%;font-size:12.5px;}
+  th,td{padding:7px 10px;text-align:left;white-space:nowrap;border-bottom:1px solid var(--line-soft);}
+  th{background:var(--bg-inset);color:var(--text-dim);font-weight:500;position:sticky;top:0;font-family:'JetBrains Mono',monospace;font-size:11px;text-transform:uppercase;letter-spacing:.03em;}
+  td input, td select{
+    background:transparent;border:1px solid transparent;color:var(--text);
+    font-family:'JetBrains Mono',monospace;font-size:12.5px;width:76px;padding:3px 4px;border-radius:4px;
+  }
+  td input:hover, td select:hover{border-color:var(--line);}
+  td input:focus, td select:focus{outline:none;border-color:var(--som);background:var(--bg-inset);}
+  tr:hover td{background:rgba(255,255,255,0.015);}
+  .rowdel{background:none;border:none;color:var(--text-faint);cursor:pointer;font-size:14px;}
+  .rowdel:hover{color:var(--lvq);}
+
+  /* ---------- BUTTONS / CONTROLS ---------- */
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:14px;}
+  button{font-family:'Inter';font-weight:500;font-size:13.5px;cursor:pointer;border-radius:7px;padding:9px 16px;border:1px solid var(--line);background:var(--bg-panel-alt);color:var(--text);transition:all .15s ease;}
+  button:hover{border-color:var(--text-dim);}
+  button.primary{background:var(--som);border-color:var(--som);color:#08221E;font-weight:600;}
+  button.primary:hover{filter:brightness(1.08);}
+  button.primary:disabled{opacity:.4;cursor:not-allowed;filter:none;}
+  button.ghost{background:none;}
+  input[type=file]{display:none;}
+  .filebtn{display:inline-block;}
+  .param-note{font-family:'JetBrains Mono',monospace;font-size:11.5px;color:var(--text-faint);margin-top:10px;}
+
+  /* ---------- STATUS / LOG ---------- */
+  .log{background:var(--bg-inset);border:1px solid var(--line);border-radius:8px;padding:14px 16px;font-family:'JetBrains Mono',monospace;font-size:12.5px;color:var(--text-dim);min-height:52px;white-space:pre-wrap;}
+  .log .ok{color:var(--som);}
+  .log .warn{color:var(--pso);}
+
+  /* ---------- STAT CARDS ---------- */
+  .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:20px;}
+  .stat{background:var(--bg-panel-alt);border:1px solid var(--line);border-radius:8px;padding:14px 16px;}
+  .stat .num{font-family:'JetBrains Mono',monospace;font-size:24px;font-weight:600;}
+  .stat .lbl{font-size:11.5px;color:var(--text-dim);margin-top:2px;}
+  .stat.pso .num{color:var(--pso);}
+  .stat.som .num{color:var(--som);}
+  .stat.lvq .num{color:var(--lvq);}
+  .stat.eval .num{color:var(--eval);}
+
+  .chip{display:inline-flex;align-items:center;gap:6px;font-family:'JetBrains Mono',monospace;font-size:11.5px;padding:4px 10px;border-radius:100px;border:1px solid var(--line);margin:3px 4px 3px 0;color:var(--text-dim);}
+  .chip.on{border-color:var(--pso);color:var(--pso);background:rgba(232,163,61,0.08);}
+  .chip .x{color:var(--text-faint);}
+
+  canvas{width:100%;display:block;}
+  .chart-box{background:var(--bg-inset);border:1px solid var(--line);border-radius:8px;padding:14px;}
+  .chart-title{font-size:12.5px;color:var(--text-dim);margin-bottom:8px;font-weight:500;}
+  .legend{display:flex;gap:16px;margin-top:8px;font-size:11.5px;color:var(--text-dim);}
+  .legend span{display:inline-flex;align-items:center;gap:6px;}
+  .legend i{width:9px;height:9px;border-radius:2px;display:inline-block;}
+
+  .placeholder{color:var(--text-faint);font-size:13px;text-align:center;padding:36px 0;}
+
+  footer{text-align:center;color:var(--text-faint);font-size:12px;padding:30px 0 10px;}
+  footer a{color:var(--text-dim);}
+</style>
+</head>
+<body>
+
+<div class="hero">
+  <div class="wrap">
+    <div class="eyebrow"><span class="dot"></span> DATA MINING · UNSUPERVISED + SUPERVISED</div>
+    <h1>PSO–SOM–LVQ <span>/ Analisis Tingkat Kecanduan Media Sosial</span></h1>
+    <p>Alat ini menjalankan tiga tahap dari skripsimu langsung di browser: <b style="color:var(--pso)">PSO</b> memilih atribut paling relevan, <b style="color:var(--som)">SOM</b> mengelompokkan pengguna berdasarkan pola pemakaian, dan <b style="color:var(--lvq)">LVQ</b> mengklasifikasikan tingkat kecanduannya. Pakai data contoh atau unggah datasetmu sendiri.</p>
+
+    <div class="pipeline" id="pipeline">
+      <div class="track" id="track"></div>
+      <div class="pnode" data-stage="data"><div class="ring">01</div><div class="plabel">Dataset</div></div>
+      <div class="pnode" data-stage="pso"><div class="ring">02</div><div class="plabel">PSO · Seleksi Fitur</div></div>
+      <div class="pnode" data-stage="som"><div class="ring">03</div><div class="plabel">SOM · Clustering</div></div>
+      <div class="pnode" data-stage="lvq"><div class="ring">04</div><div class="plabel">LVQ · Klasifikasi</div></div>
+      <div class="pnode" data-stage="eval"><div class="ring">05</div><div class="plabel">Evaluasi</div></div>
+    </div>
+  </div>
+</div>
+
+<div class="wrap">
+
+  <!-- ================= DATASET ================= -->
+  <section>
+    <div class="sec-head"><span class="sec-num mono">01</span><h2>Dataset</h2></div>
+    <p class="sec-desc">Butuh minimal ±10 baris data dengan kolom: Daily_Usage_Time_min, Posts_Per_Day, Likes_Received_Daily, Productivity_Loss_Score, FOMO_Score, dan Addiction_Level (Rendah/Sedang/Tinggi).</p>
+
+    <div class="panel">
+      <div class="tabs">
+        <button class="tab active" data-tab="contoh">Data Contoh</button>
+        <button class="tab" data-tab="upload">Upload CSV</button>
+        <button class="tab" data-tab="manual">Input Manual</button>
+      </div>
+
+      <div class="tabpane active" data-pane="contoh">
+        <p style="font-size:13px;color:var(--text-dim);margin-top:0;">20 baris data simulasi dengan pola serupa laporan (usage tinggi → productivity loss & FOMO tinggi). Bisa langsung diedit di tabel bawah.</p>
+      </div>
+
+      <div class="tabpane" data-pane="upload">
+        <p style="font-size:13px;color:var(--text-dim);margin-top:0;">Format CSV, baris pertama header. Nama kolom bebas, lalu cocokkan lewat dropdown yang muncul.</p>
+        <label class="filebtn"><button type="button" onclick="document.getElementById('csvfile').click()">Pilih file CSV</button></label>
+        <input type="file" id="csvfile" accept=".csv">
+        <span id="filename" class="mono" style="font-size:12px;color:var(--text-dim);margin-left:8px;"></span>
+      </div>
+
+      <div class="tabpane" data-pane="manual">
+        <p style="font-size:13px;color:var(--text-dim);margin-top:0;">Tambah baris kosong lalu isi manual, atau edit langsung dari tabel data contoh.</p>
+        <button id="addRowBtn">+ Tambah baris</button>
+      </div>
+
+      <div class="table-scroll" style="margin-top:16px;max-height:340px;overflow-y:auto;">
+        <table id="dataTable">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Daily Usage (min)</th>
+              <th>Posts/Day</th>
+              <th>Likes/Day</th>
+              <th>Productivity Loss</th>
+              <th>FOMO Score</th>
+              <th>Addiction Level</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="dataBody"></tbody>
+        </table>
+      </div>
+
+      <div class="row">
+        <button class="primary" id="runBtn">▶ Jalankan Analisis</button>
+        <button class="ghost" id="resetBtn">Reset ke data contoh</button>
+        <span class="param-note" id="rowCount"></span>
+      </div>
+      <div class="log" id="statusLog" style="margin-top:14px;">Menunggu — klik "Jalankan Analisis" untuk memulai pipeline PSO → SOM → LVQ.</div>
+    </div>
+  </section>
+
+  <!-- ================= PSO ================= -->
+  <section>
+    <div class="sec-head"><span class="sec-num mono" style="color:var(--pso)">02</span><h2>PSO — Seleksi Fitur</h2></div>
+    <p class="sec-desc">20 partikel mencari kombinasi atribut yang memaksimalkan akurasi klasifikasi awal (fitness), selama 5 iterasi. Parameter: c1=0.5, c2=0.3, w=0.9 — sama seperti Tabel 5 di laporan.</p>
+    <div class="panel">
+      <div class="stats" id="psoStats"></div>
+      <div class="chart-box">
+        <div class="chart-title">Fitness Global Best per Iterasi</div>
+        <canvas id="psoChart" height="160"></canvas>
+      </div>
+      <div style="margin-top:14px;">
+        <div class="chart-title">Fitur terpilih (Global Best)</div>
+        <div id="psoFeatures"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= SOM ================= -->
+  <section>
+    <div class="sec-head"><span class="sec-num mono" style="color:var(--som)">03</span><h2>SOM — Clustering</h2></div>
+    <p class="sec-desc">2 neuron kompetitif dilatih 5 epoch (learning rate 0.5) memakai fitur hasil seleksi PSO. Setiap data ditempatkan ke neuron pemenang (Best Matching Unit) terdekat.</p>
+    <div class="grid2">
+      <div class="chart-box">
+        <div class="chart-title">Hasil Clustering (Usage vs Productivity Loss)</div>
+        <canvas id="somScatter" height="220"></canvas>
+        <div class="legend">
+          <span><i style="background:var(--som)"></i>Cluster 0</span>
+          <span><i style="background:var(--pso)"></i>Cluster 1</span>
+        </div>
+      </div>
+      <div class="chart-box">
+        <div class="chart-title">Jumlah Data Tiap Cluster</div>
+        <canvas id="somBar" height="220"></canvas>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= LVQ ================= -->
+  <section>
+    <div class="sec-head"><span class="sec-num mono" style="color:var(--lvq)">04</span><h2>LVQ — Klasifikasi</h2></div>
+    <p class="sec-desc">Data displit 80% latih / 20% uji. Prototipe tiap kelas (Rendah/Sedang/Tinggi) diperbarui selama 5 epoch dengan learning rate 0.1.</p>
+    <div class="grid2">
+      <div class="chart-box">
+        <div class="chart-title">Akurasi per Epoch</div>
+        <canvas id="lvqAcc" height="200"></canvas>
+      </div>
+      <div class="chart-box">
+        <div class="chart-title">Actual vs Predicted (data uji)</div>
+        <canvas id="lvqPred" height="200"></canvas>
+        <div class="legend">
+          <span><i style="background:var(--eval)"></i>Actual</span>
+          <span><i style="background:var(--lvq)"></i>Predicted</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= EVALUASI ================= -->
+  <section style="border-bottom:none;">
+    <div class="sec-head"><span class="sec-num mono" style="color:var(--eval)">05</span><h2>Evaluasi Model</h2></div>
+    <p class="sec-desc">Akurasi akhir, confusion matrix, dan classification report (precision / recall / F1) dihitung dari data uji.</p>
+    <div class="stats" id="evalStats"></div>
+    <div class="grid2">
+      <div class="chart-box">
+        <div class="chart-title">Confusion Matrix</div>
+        <div id="confMatrix"></div>
+      </div>
+      <div class="chart-box">
+        <div class="chart-title">Classification Report</div>
+        <div id="classReport"></div>
+      </div>
+    </div>
+  </section>
+
+</div>
+
+<footer>dibangun untuk latihan skripsi · seluruh perhitungan (PSO, SOM, LVQ) berjalan lokal di browser, tidak ada data yang dikirim ke server</footer>
+
+<script>
+/* =========================================================================
+   BAGIAN 0 — DATA CONTOH & STATE
+   ========================================================================= */
+const FEATURE_KEYS = ["Daily_Usage_Time_min","Posts_Per_Day","Likes_Received_Daily","Productivity_Loss_Score","FOMO_Score"];
+const FEATURE_LABELS = ["Daily Usage (min)","Posts/Day","Likes/Day","Productivity Loss","FOMO Score"];
+const CLASSES = ["Rendah","Sedang","Tinggi"];
+
+// 20 baris data simulasi, pola meniru Gambar 2 di laporan (usage naik -> productivity loss & FOMO naik)
+const SAMPLE_DATA = [
+  [20,1,15,1,2,"Rendah"],[35,2,25,2,2,"Rendah"],[45,2,30,2,3,"Rendah"],
+  [50,3,40,2,3,"Rendah"],[60,3,45,3,3,"Rendah"],
+  [90,4,80,4,4,"Sedang"],[110,5,90,4,5,"Sedang"],[120,5,100,5,5,"Sedang"],
+  [130,6,110,4,5,"Sedang"],[145,6,130,7,6,"Sedang"],[150,7,140,5,6,"Sedang"],
+  [165,7,160,6,6,"Sedang"],[175,8,190,8,7,"Tinggi"],[180,8,200,8,7,"Tinggi"],
+  [190,9,210,7,7,"Tinggi"],[200,9,230,8,8,"Tinggi"],[210,10,260,9,8,"Tinggi"],
+  [240,11,290,9,9,"Tinggi"],[300,12,340,10,10,"Tinggi"],[125,6,120,4,5,"Sedang"]
+].map((r,i)=>({
+  id:i+1,
+  Daily_Usage_Time_min:r[0], Posts_Per_Day:r[1], Likes_Received_Daily:r[2],
+  Productivity_Loss_Score:r[3], FOMO_Score:r[4], Addiction_Level:r[5]
+}));
+
+let dataset = JSON.parse(JSON.stringify(SAMPLE_DATA));
+let results = null; // hasil analisis terakhir
+
+/* =========================================================================
+   BAGIAN 1 — RENDER TABEL DATA (bisa diedit langsung)
+   ========================================================================= */
+function renderTable(){
+  const body = document.getElementById('dataBody');
+  body.innerHTML = "";
+  dataset.forEach((row, idx)=>{
+    const tr = document.createElement('tr');
+    let cells = "";
+    FEATURE_KEYS.forEach(key=>{
+      cells += `<td><input type="number" data-idx="${idx}" data-key="${key}" value="${row[key]}"></td>`;
+    });
+    cells += `<td><select data-idx="${idx}" data-key="Addiction_Level">
+        ${CLASSES.map(c=>`<option value="${c}" ${row.Addiction_Level===c?'selected':''}>${c}</option>`).join("")}
+      </select></td>`;
+    tr.innerHTML = `<td class="mono" style="color:var(--text-faint)">${idx+1}</td>${cells}<td><button class="rowdel" data-idx="${idx}">✕</button></td>`;
+    body.appendChild(tr);
+  });
+  document.getElementById('rowCount').textContent = `${dataset.length} baris data`;
+
+  body.querySelectorAll('input,select').forEach(el=>{
+    el.addEventListener('change', e=>{
+      const idx = +e.target.dataset.idx, key = e.target.dataset.key;
+      dataset[idx][key] = key==="Addiction_Level" ? e.target.value : parseFloat(e.target.value)||0;
+    });
+  });
+  body.querySelectorAll('.rowdel').forEach(btn=>{
+    btn.addEventListener('click', e=>{
+      dataset.splice(+e.target.dataset.idx,1);
+      renderTable();
+    });
+  });
+}
+
+document.getElementById('addRowBtn').addEventListener('click', ()=>{
+  dataset.push({id:dataset.length+1, Daily_Usage_Time_min:0, Posts_Per_Day:0, Likes_Received_Daily:0, Productivity_Loss_Score:0, FOMO_Score:0, Addiction_Level:"Rendah"});
+  renderTable();
+});
+document.getElementById('resetBtn').addEventListener('click', ()=>{
+  dataset = JSON.parse(JSON.stringify(SAMPLE_DATA));
+  renderTable();
+  log("Dataset dikembalikan ke data contoh.", "ok");
+});
+
+/* Tabs sederhana untuk sumber data */
+document.querySelectorAll('.tab').forEach(tab=>{
+  tab.addEventListener('click', ()=>{
+    document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+    document.querySelectorAll('.tabpane').forEach(p=>p.classList.remove('active'));
+    tab.classList.add('active');
+    document.querySelector(`.tabpane[data-pane="${tab.dataset.tab}"]`).classList.add('active');
+  });
+});
+
+/* =========================================================================
+   BAGIAN 2 — UPLOAD CSV (parser sederhana, tanpa library)
+   ========================================================================= */
+document.getElementById('csvfile').addEventListener('change', (e)=>{
+  const file = e.target.files[0];
+  if(!file) return;
+  document.getElementById('filename').textContent = file.name;
+  const reader = new FileReader();
+  reader.onload = (ev)=>{
+    try{
+      const rows = parseCSV(ev.target.result);
+      if(rows.length < 2){ log("File CSV kosong atau tidak terbaca.","warn"); return; }
+      const header = rows[0].map(h=>h.trim());
+      const parsed = rows.slice(1).filter(r=>r.length===header.length && r.some(v=>v!=="")).map(r=>{
+        const obj = {};
+        header.forEach((h,i)=>{
+          const val = r[i];
+          obj[h] = isNaN(parseFloat(val)) ? val : parseFloat(val);
+        });
+        return obj;
+      });
+      // cocokkan otomatis kolom yang namanya mirip, sisanya isi 0 / kelas default
+      dataset = parsed.map((row,i)=>{
+        const mapped = {id:i+1};
+        FEATURE_KEYS.forEach(key=>{
+          const found = Object.keys(row).find(k=>k.toLowerCase().replace(/[^a-z]/g,"") === key.toLowerCase().replace(/[^a-z]/g,""));
+          mapped[key] = found ? (parseFloat(row[found])||0) : 0;
+        });
+        const labelKey = Object.keys(row).find(k=>k.toLowerCase().includes("addict") || k.toLowerCase().includes("level") || k.toLowerCase().includes("label"));
+        let label = labelKey ? String(row[labelKey]) : CLASSES[0];
+        if(!CLASSES.includes(label)) label = CLASSES[Math.min(2, Math.max(0, Math.round(parseFloat(label)) || 0))] || CLASSES[0];
+        mapped.Addiction_Level = label;
+        return mapped;
+      });
+      renderTable();
+      log(`CSV berhasil dimuat: ${dataset.length} baris. Cek kolom di tabel — sesuaikan manual bila ada yang meleset.`,"ok");
+      document.querySelector('.tab[data-tab="contoh"]').click();
+    }catch(err){
+      log("Gagal membaca CSV: "+err.message, "warn");
+    }
+  };
+  reader.readAsText(file);
+});
+
+function parseCSV(text){
+  return text.trim().split(/\r?\n/).map(line=>{
+    // parser CSV ringan yang menangani koma di dalam tanda kutip
+    const out=[]; let cur=""; let inQ=false;
+    for(let i=0;i<line.length;i++){
+      const c=line[i];
+      if(c==='"'){ inQ=!inQ; continue; }
+      if(c===',' && !inQ){ out.push(cur); cur=""; continue; }
+      cur+=c;
+    }
+    out.push(cur);
+    return out;
+  });
+}
+
+/* =========================================================================
+   BAGIAN 3 — PREPROCESSING (normalisasi min-max)
+   ========================================================================= */
+function normalize(rows, keys){
+  const bounds = {};
+  keys.forEach(k=>{
+    const vals = rows.map(r=>r[k]);
+    bounds[k] = {min:Math.min(...vals), max:Math.max(...vals)};
+  });
+  const norm = rows.map(r=>{
+    const o={};
+    keys.forEach(k=>{
+      const {min,max} = bounds[k];
+      o[k] = max>min ? (r[k]-min)/(max-min) : 0.5;
+    });
+    return o;
+  });
+  return {norm, bounds};
+}
+
+function shuffledIndices(n, seed){
+  // shuffle deterministik (biar hasil konsisten tiap run untuk dataset yang sama)
+  const arr = Array.from({length:n},(_,i)=>i);
+  let s = seed;
+  const rand = ()=>{ s = (s*9301+49297)%233280; return s/233280; };
+  for(let i=arr.length-1;i>0;i--){
+    const j = Math.floor(rand()*(i+1));
+    [arr[i],arr[j]]=[arr[j],arr[i]];
+  }
+  return arr;
+}
+
+/* =========================================================================
+   BAGIAN 4 — PSO UNTUK SELEKSI FITUR
+   Setiap partikel = 5 angka (0..1), satu per fitur. Fitur "aktif" bila > 0.5.
+   Fitness = akurasi classifier nearest-centroid sederhana pakai fitur aktif itu
+   (mengevaluasi kombinasi fitur, cara kerja PSO klasik untuk feature selection).
+   ========================================================================= */
+function fitnessOfMask(mask, normRows, labels, trainIdx, testIdx){
+  const activeKeys = FEATURE_KEYS.filter((_,i)=>mask[i]);
+  if(activeKeys.length===0) return 0;
+  // centroid tiap kelas dari data latih
+  const centroids = {};
+  CLASSES.forEach(c=>{
+    const rows = trainIdx.filter(i=>labels[i]===c).map(i=>normRows[i]);
+    if(rows.length===0){ centroids[c]=null; return; }
+    const cen = {};
+    activeKeys.forEach(k=> cen[k] = rows.reduce((s,r)=>s+r[k],0)/rows.length );
+    centroids[c]=cen;
+  });
+  let correct=0;
+  testIdx.forEach(i=>{
+    let best=null,bestDist=Infinity;
+    CLASSES.forEach(c=>{
+      if(!centroids[c]) return;
+      let d=0;
+      activeKeys.forEach(k=> d += (normRows[i][k]-centroids[c][k])**2 );
+      if(d<bestDist){bestDist=d;best=c;}
+    });
+    if(best===labels[i]) correct++;
+  });
+  return testIdx.length ? correct/testIdx.length : 0;
+}
+
+function runPSO(normRows, labels){
+  const D = FEATURE_KEYS.length;
+  const nParticles = 20, iterations = 5, w=0.9, c1=0.5, c2=0.3;
+  const order = shuffledIndices(normRows.length, 7);
+  const splitAt = Math.floor(normRows.length*0.8);
+  const trainIdx = order.slice(0,splitAt), testIdx = order.slice(splitAt);
+
+  let particles = Array.from({length:nParticles},()=>({
+    pos: Array.from({length:D},()=>Math.random()),
+    vel: Array.from({length:D},()=>(Math.random()-0.5)*0.5),
+    best: null, bestFit: -1
+  }));
+  let gBest=null, gBestFit=-1, history=[];
+
+  for(let it=0; it<iterations; it++){
+    particles.forEach(p=>{
+      const mask = p.pos.map(v=>v>0.5?1:0);
+      const fit = fitnessOfMask(mask, normRows, labels, trainIdx, testIdx);
+      if(fit>p.bestFit){p.bestFit=fit; p.best=[...p.pos];}
+      if(fit>gBestFit){gBestFit=fit; gBest=[...p.pos];}
+    });
+    particles.forEach(p=>{
+      for(let d=0; d<D; d++){
+        const r1=Math.random(), r2=Math.random();
+        p.vel[d] = w*p.vel[d] + c1*r1*(p.best[d]-p.pos[d]) + c2*r2*(gBest[d]-p.pos[d]);
+        p.pos[d] = Math.min(1, Math.max(0, p.pos[d] + p.vel[d]));
+      }
+    });
+    history.push(gBestFit);
+  }
+  // pastikan minimal 2 fitur terpilih (biar SOM/LVQ tidak kolaps ke 1 dimensi)
+  let mask = gBest.map(v=>v>0.5?1:0);
+  if(mask.reduce((a,b)=>a+b,0) < 2){
+    const ranked = gBest.map((v,i)=>({v,i})).sort((a,b)=>b.v-a.v);
+    mask = FEATURE_KEYS.map(()=>0);
+    mask[ranked[0].i]=1; mask[ranked[1].i]=1;
+  }
+  return {mask, history, trainIdx, testIdx};
+}
+
+/* =========================================================================
+   BAGIAN 5 — SOM (2 neuron, competitive learning)
+   ========================================================================= */
+function runSOM(normRows, activeKeys){
+  const epochs=5, lr=0.5, nNeurons=2;
+  let weights = Array.from({length:nNeurons},()=> {
+    const w={}; activeKeys.forEach(k=> w[k]=Math.random()); return w;
+  });
+  const order = shuffledIndices(normRows.length, 3);
+  for(let e=0;e<epochs;e++){
+    order.forEach(i=>{
+      const x = normRows[i];
+      let bmu=0,bd=Infinity;
+      weights.forEach((w,n)=>{
+        let d=0; activeKeys.forEach(k=> d+=(x[k]-w[k])**2 );
+        if(d<bd){bd=d;bmu=n;}
+      });
+      activeKeys.forEach(k=> weights[bmu][k] += lr*(x[k]-weights[bmu][k]) );
+    });
+  }
+  const clusters = normRows.map(x=>{
+    let bmu=0,bd=Infinity;
+    weights.forEach((w,n)=>{
+      let d=0; activeKeys.forEach(k=> d+=(x[k]-w[k])**2 );
+      if(d<bd){bd=d;bmu=n;}
+    });
+    return bmu;
+  });
+  return {clusters, weights};
+}
+
+/* =========================================================================
+   BAGIAN 6 — LVQ (klasifikasi supervised)
+   ========================================================================= */
+function runLVQ(normRows, labels, activeKeys, trainIdx, testIdx){
+  const epochs=5, lr0=0.1;
+  // inisialisasi prototipe = rata-rata data latih tiap kelas (fallback: rata-rata semua)
+  let prototypes = {};
+  CLASSES.forEach(c=>{
+    const rows = trainIdx.filter(i=>labels[i]===c).map(i=>normRows[i]);
+    const src = rows.length? rows : trainIdx.map(i=>normRows[i]);
+    const p={}; activeKeys.forEach(k=> p[k]= src.reduce((s,r)=>s+r[k],0)/src.length );
+    prototypes[c]=p;
+  });
+
+  function predict(x){
+    let best=CLASSES[0], bd=Infinity;
+    CLASSES.forEach(c=>{
+      let d=0; activeKeys.forEach(k=> d+=(x[k]-prototypes[c][k])**2 );
+      if(d<bd){bd=d; best=c;}
+    });
+    return best;
+  }
+  function accuracyOn(idxList){
+    let correct=0;
+    idxList.forEach(i=>{ if(predict(normRows[i])===labels[i]) correct++; });
+    return idxList.length? correct/idxList.length : 0;
+  }
+
+  const accHistory=[];
+  const order = shuffledIndices(trainIdx.length, 11).map(i=>trainIdx[i]);
+  for(let e=0;e<epochs;e++){
+    const lr = lr0 * (1 - e/epochs); // sedikit decay agar update mengecil tiap epoch
+    order.forEach(i=>{
+      const x = normRows[i], y = labels[i];
+      const pred = predict(x);
+      const sign = pred===y ? 1 : -1;
+      activeKeys.forEach(k=>{
+        prototypes[pred][k] += sign*lr*(x[k]-prototypes[pred][k]);
+      });
+    });
+    accHistory.push(accuracyOn(testIdx.length?testIdx:trainIdx));
+  }
+
+  const predictions = testIdx.map(i=>predict(normRows[i]));
+  return {prototypes, accHistory, predictions};
+}
+
+/* =========================================================================
+   BAGIAN 7 — METRIK EVALUASI
+   ========================================================================= */
+function evaluate(actual, predicted){
+  const n = actual.length;
+  const cm = CLASSES.map(()=>CLASSES.map(()=>0));
+  actual.forEach((a,i)=>{
+    const p = predicted[i];
+    cm[CLASSES.indexOf(a)][CLASSES.indexOf(p)]++;
+  });
+  const correct = actual.filter((a,i)=>a===predicted[i]).length;
+  const accuracy = n? correct/n : 0;
+
+  const report = CLASSES.map((c,ci)=>{
+    const tp = cm[ci][ci];
+    const fp = cm.reduce((s,row,ri)=> ri===ci?s:s+row[ci], 0);
+    const fn = cm[ci].reduce((s,v,cj)=> cj===ci?s:s+v, 0);
+    const precision = (tp+fp)? tp/(tp+fp) : 0;
+    const recall = (tp+fn)? tp/(tp+fn) : 0;
+    const f1 = (precision+recall)? 2*precision*recall/(precision+recall) : 0;
+    return {cls:c, precision, recall, f1, support: actual.filter(a=>a===c).length};
+  });
+  return {cm, accuracy, report};
+}
+
+/* =========================================================================
+   BAGIAN 8 — DRAWING (canvas, tanpa library eksternal)
+   ========================================================================= */
+function setupCanvas(id){
+  const c = document.getElementById(id);
+  const dpr = window.devicePixelRatio||1;
+  const cssH = parseInt(c.getAttribute('height'))||200;
+  const rect = c.getBoundingClientRect();
+  const cssW = rect.width || c.parentElement.clientWidth || 300;
+  c.style.height = cssH+'px';
+  c.width = cssW*dpr;
+  c.height = cssH*dpr;
+  const ctx = c.getContext('2d');
+  ctx.scale(dpr,dpr);
+  return {ctx, w:cssW, h:cssH};
+}
+const GRID = "#212A3C", AXIS = "#5C6478", TXT="#8B93A7";
+
+function drawLineChart(id, series, opts={}){
+  const {ctx,w,h} = setupCanvas(id);
+  ctx.clearRect(0,0,w,h);
+  const pad = {l:36,r:14,t:10,b:24};
+  const plotW = w-pad.l-pad.r, plotH = h-pad.t-pad.b;
+  const allY = series.flatMap(s=>s.data);
+  let minY = opts.minY!==undefined?opts.minY:Math.min(...allY);
+  let maxY = opts.maxY!==undefined?opts.maxY:Math.max(...allY);
+  if(minY===maxY){minY-=1;maxY+=1;}
+  const n = series[0].data.length;
+  // grid
+  ctx.strokeStyle = GRID; ctx.lineWidth=1; ctx.font="10px JetBrains Mono";
+  for(let g=0;g<=4;g++){
+    const y = pad.t + plotH*g/4;
+    ctx.beginPath(); ctx.moveTo(pad.l,y); ctx.lineTo(w-pad.r,y); ctx.stroke();
+    ctx.fillStyle = TXT;
+    ctx.fillText((maxY-(maxY-minY)*g/4).toFixed(2), 2, y+3);
+  }
+  series.forEach(s=>{
+    ctx.strokeStyle = s.color; ctx.lineWidth=2; ctx.beginPath();
+    s.data.forEach((v,i)=>{
+      const x = pad.l + (n>1? plotW*i/(n-1) : plotW/2);
+      const y = pad.t + plotH*(1-(v-minY)/(maxY-minY));
+      i===0? ctx.moveTo(x,y) : ctx.lineTo(x,y);
+    });
+    ctx.stroke();
+    s.data.forEach((v,i)=>{
+      const x = pad.l + (n>1? plotW*i/(n-1) : plotW/2);
+      const y = pad.t + plotH*(1-(v-minY)/(maxY-minY));
+      ctx.fillStyle = s.color; ctx.beginPath(); ctx.arc(x,y,3,0,7); ctx.fill();
+    });
+  });
+  ctx.fillStyle = TXT;
+  for(let i=0;i<n;i++){
+    const x = pad.l + (n>1? plotW*i/(n-1) : plotW/2);
+    ctx.fillText(opts.xLabels? opts.xLabels[i] : (i+1), x-4, h-6);
+  }
+}
+
+function drawScatter(id, points, opts={}){
+  const {ctx,w,h} = setupCanvas(id);
+  ctx.clearRect(0,0,w,h);
+  const pad = {l:40,r:14,t:10,b:26};
+  const plotW=w-pad.l-pad.r, plotH=h-pad.t-pad.b;
+  const xs = points.map(p=>p.x), ys = points.map(p=>p.y);
+  const minX=Math.min(...xs), maxX=Math.max(...xs);
+  const minY=Math.min(...ys), maxY=Math.max(...ys);
+  ctx.strokeStyle=GRID; ctx.font="10px JetBrains Mono"; ctx.fillStyle=TXT;
+  for(let g=0;g<=4;g++){
+    const y = pad.t+plotH*g/4;
+    ctx.beginPath(); ctx.moveTo(pad.l,y); ctx.lineTo(w-pad.r,y); ctx.stroke();
+    ctx.fillText((maxY-(maxY-minY)*g/4).toFixed(0), 2, y+3);
+  }
+  points.forEach(p=>{
+    const x = pad.l + plotW*((p.x-minX)/((maxX-minX)||1));
+    const y = pad.t + plotH*(1-(p.y-minY)/((maxY-minY)||1));
+    ctx.fillStyle = p.color; ctx.beginPath(); ctx.arc(x,y,4,0,7); ctx.fill();
+  });
+  ctx.fillStyle=TXT;
+  ctx.fillText(minX.toFixed(0), pad.l-4, h-6);
+  ctx.fillText(maxX.toFixed(0), w-pad.r-18, h-6);
+}
+
+function drawBarChart(id, labels, values, colors){
+  const {ctx,w,h} = setupCanvas(id);
+  ctx.clearRect(0,0,w,h);
+  const pad={l:30,r:14,t:10,b:24};
+  const plotW=w-pad.l-pad.r, plotH=h-pad.t-pad.b;
+  const maxV = Math.max(...values,1);
+  const bw = plotW/values.length*0.5;
+  ctx.font="10px JetBrains Mono";
+  values.forEach((v,i)=>{
+    const slot = plotW/values.length;
+    const x = pad.l + slot*i + (slot-bw)/2;
+    const bh = plotH*(v/maxV);
+    const y = pad.t+plotH-bh;
+    ctx.fillStyle = colors[i%colors.length];
+    ctx.fillRect(x,y,bw,bh);
+    ctx.fillStyle = TXT;
+    ctx.fillText(v, x+bw/2-6, y-4);
+    ctx.fillText(labels[i], x+bw/2-8, h-6);
+  });
+}
+
+/* =========================================================================
+   BAGIAN 9 — RENDER HASIL KE UI
+   ========================================================================= */
+function log(msg, type=""){
+  const el = document.getElementById('statusLog');
+  const span = type? `<span class="${type}">${msg}</span>` : msg;
+  el.innerHTML = span;
+}
+function setStage(stage, state){
+  const node = document.querySelector(`.pnode[data-stage="${stage}"]`);
+  node.classList.remove('active','done');
+  if(state) node.classList.add(state);
+}
+function setTrack(pct){ document.getElementById('track').style.width = pct+"%"; }
+
+function renderPSO(pso){
+  const stageColors = {0:"var(--pso)"};
+  document.getElementById('psoStats').innerHTML = `
+    <div class="stat pso"><div class="num">${pso.mask.reduce((a,b)=>a+b,0)}/5</div><div class="lbl">fitur terpilih</div></div>
+    <div class="stat pso"><div class="num">${(pso.history[pso.history.length-1]*100).toFixed(0)}%</div><div class="lbl">fitness akhir (akurasi seleksi)</div></div>
+    <div class="stat pso"><div class="num">20</div><div class="lbl">partikel</div></div>
+    <div class="stat pso"><div class="num">5</div><div class="lbl">iterasi</div></div>`;
+  drawLineChart('psoChart', [{data:pso.history, color:"#E8A33D"}], {minY:0,maxY:1});
+  document.getElementById('psoFeatures').innerHTML = FEATURE_LABELS.map((lbl,i)=>
+    `<span class="chip ${pso.mask[i]?'on':''}">${pso.mask[i]?'✓':'✕'} ${lbl}</span>`
+  ).join("");
+}
+
+function renderSOM(som, rows, activeKeys){
+  const counts = [0,0];
+  som.clusters.forEach(c=>counts[c]++);
+  const colors = ["#4FB6A8","#E8A33D"];
+  drawScatter('somScatter', rows.map((r,i)=>({
+    x:r.Daily_Usage_Time_min, y:r.Productivity_Loss_Score, color: colors[som.clusters[i]]
+  })));
+  drawBarChart('somBar', ["Cluster 0","Cluster 1"], counts, colors);
+}
+
+function renderLVQ(lvq, testLabels){
+  drawLineChart('lvqAcc', [{data:lvq.accHistory, color:"#D6607E"}], {minY:0,maxY:1});
+  const actualNum = testLabels.map(l=>CLASSES.indexOf(l));
+  const predNum = lvq.predictions.map(l=>CLASSES.indexOf(l));
+  drawLineChart('lvqPred', [
+    {data:actualNum, color:"#7C9CDE"},
+    {data:predNum, color:"#D6607E"}
+  ], {minY:0,maxY:2});
+}
+
+function renderEval(ev){
+  document.getElementById('evalStats').innerHTML = `
+    <div class="stat eval"><div class="num">${(ev.accuracy*100).toFixed(1)}%</div><div class="lbl">akurasi keseluruhan</div></div>
+    <div class="stat eval"><div class="num">${ev.report.reduce((s,r)=>s+r.support,0)}</div><div class="lbl">data uji</div></div>
+    <div class="stat eval"><div class="num">${(ev.report.reduce((s,r)=>s+r.f1,0)/ev.report.length*100).toFixed(0)}%</div><div class="lbl">rata-rata F1</div></div>`;
+
+  // confusion matrix sebagai grid berwarna
+  const maxV = Math.max(...ev.cm.flat(),1);
+  let html = `<div style="display:grid;grid-template-columns:70px repeat(${CLASSES.length},1fr);gap:4px;font-size:12px;">
+    <div></div>${CLASSES.map(c=>`<div class="mono" style="color:var(--text-dim);text-align:center;">${c}</div>`).join("")}`;
+  ev.cm.forEach((row,ri)=>{
+    html += `<div class="mono" style="color:var(--text-dim);display:flex;align-items:center;">${CLASSES[ri]}</div>`;
+    row.forEach(v=>{
+      const alpha = 0.15 + 0.65*(v/maxV);
+      html += `<div class="mono" style="background:rgba(124,156,222,${v?alpha:0.05});border-radius:5px;text-align:center;padding:10px 0;">${v}</div>`;
+    });
+  });
+  html += `</div><div style="font-size:11px;color:var(--text-faint);margin-top:8px;">baris = actual · kolom = predicted</div>`;
+  document.getElementById('confMatrix').innerHTML = html;
+
+  document.getElementById('classReport').innerHTML = `
+    <table style="width:100%;">
+      <thead><tr><th>Kelas</th><th>Precision</th><th>Recall</th><th>F1</th><th>Support</th></tr></thead>
+      <tbody>${ev.report.map(r=>`<tr>
+        <td>${r.cls}</td><td class="mono">${r.precision.toFixed(2)}</td>
+        <td class="mono">${r.recall.toFixed(2)}</td><td class="mono">${r.f1.toFixed(2)}</td>
+        <td class="mono">${r.support}</td></tr>`).join("")}
+      </tbody>
+    </table>`;
+}
+
+/* =========================================================================
+   BAGIAN 10 — ORKESTRASI PIPELINE
+   ========================================================================= */
+async function runPipeline(){
+  if(dataset.length < 8){
+    log("Minimal 8 baris data dibutuhkan agar split latih/uji masuk akal.","warn");
+    return;
+  }
+  const runBtn = document.getElementById('runBtn');
+  runBtn.disabled = true;
+  ['pso','som','lvq','eval'].forEach(s=>setStage(s,null));
+  setStage('data','done'); setTrack(10);
+  log("Memproses dataset (label encoding + normalisasi MinMax)…");
+  await tick();
+
+  const labels = dataset.map(r=>r.Addiction_Level);
+  const {norm} = normalize(dataset, FEATURE_KEYS);
+
+  setStage('pso','active'); setTrack(28);
+  log("Menjalankan PSO — mencari kombinasi fitur terbaik (20 partikel × 5 iterasi)…");
+  await tick();
+  const pso = runPSO(norm, labels);
+  renderPSO(pso);
+  setStage('pso','done'); setTrack(46);
+
+  const activeKeys = FEATURE_KEYS.filter((_,i)=>pso.mask[i]);
+  log(`PSO selesai. Fitur terpilih: ${activeKeys.join(", ")}.`,"ok");
+  await tick();
+
+  setStage('som','active'); setTrack(64);
+  log("Melatih SOM (2 neuron, 5 epoch) untuk clustering…");
+  await tick();
+  const som = runSOM(norm, activeKeys);
+  renderSOM(som, dataset, activeKeys);
+  setStage('som','done'); setTrack(80);
+  await tick();
+
+  setStage('lvq','active'); setTrack(90);
+  log("Melatih LVQ (5 epoch, learning rate 0.1) untuk klasifikasi…");
+  await tick();
+  const lvq = runLVQ(norm, labels, activeKeys, pso.trainIdx, pso.testIdx);
+  const testLabels = pso.testIdx.map(i=>labels[i]);
+  renderLVQ(lvq, testLabels);
+  setStage('lvq','done'); setTrack(96);
+  await tick();
+
+  setStage('eval','active');
+  const ev = evaluate(testLabels, lvq.predictions);
+  renderEval(ev);
+  setStage('eval','done'); setTrack(100);
+
+  log(`Selesai — akurasi klasifikasi LVQ pada data uji: ${(ev.accuracy*100).toFixed(1)}% (${testLabels.length} data uji, fitur: ${activeKeys.join(", ")}).`,"ok");
+  results = {pso, som, lvq, ev};
+  runBtn.disabled = false;
+}
+function tick(){ return new Promise(r=>setTimeout(r, 220)); }
+
+document.getElementById('runBtn').addEventListener('click', runPipeline);
+
+/* =========================================================================
+   INIT
+   ========================================================================= */
+renderTable();
+window.addEventListener('resize', ()=>{ if(results){ /* re-render on resize untuk chart tetap presisi */
+  renderPSO(results.pso);
+  renderSOM(results.som, dataset, FEATURE_KEYS.filter((_,i)=>results.pso.mask[i]));
+  renderLVQ(results.lvq, results.pso.testIdx.map(i=>dataset[i].Addiction_Level));
+}});
+</script>
+</body>
+</html>
